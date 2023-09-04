@@ -2,6 +2,7 @@ import numpy as np
 from typing import Callable,List
 from matplotlib import pyplot as plt
 
+
 ## Implementation ##################################################################################
 
 # un punto está definido como (x,y,w)
@@ -76,49 +77,52 @@ lower_thresh = 200
 #   elige una recta al azar en R2
 #   mueve la recta hasta que divida la mitad del cluster, en términos de peso
 #   crea dos clusteres a partir de esta división
-def randomSplit(n : treeNode):
+def randomSplit(n : treeNode, K : int = 2):
     global lower_thresh
     if (n.commodity_weight<lower_thresh): return n
     # else
 
-    # recta al azar
-    a = np.random.uniform(-1,1)
-    b = np.random.uniform(-1,1)
-    coordinate = lambda x : a*x[0] + b*x[1]
+    # calculate most  disperse direction
+    var = np.var(n.elements,axis=0)
+    coordinate = lambda x : x[0] - np.sin(x[1])*0.2
+    if var[1] > var[0]: coordinate = lambda x : x[1] - np.cos(x[0])*0.2 
     
-    # encontrar el coeficiente z hasta que ax+by+z divida el cluster justo a la mitad
-    # en términos de peso
-    # operación O(|K|log|K|)
+    # ordenar los elementos según la coordenada y calcular el peso debajo recta
+    # de la recta que pasa por cada punto
     arr = np.array(sorted([[coordinate(x),x[2]] for x in n.elements]))
     arr_sum = arr[:,1].cumsum()
-    i = np.searchsorted(arr_sum,n.commodity_weight/2)
-    if i<0: i=0
-    if i>=len(arr): i=len(arr)-1
-    z = arr[i][0]
 
-    # se forman los nuevos clústeres
-    higher = [x for x in n.elements if coordinate(x) >= z]
-    lower  = [x for x in n.elements if coordinate(x) <  z]
+    # encontrar los coeficientes z_k para que ax+by+z divida el cluster justo en 1/K del peso
+    I = [ np.searchsorted(arr_sum, (n.commodity_weight * float(k))/K) for k in range(K) ]
+    for j,i in enumerate(I):
+        if i<0:
+            I[j] = 0
+        if i>=len(arr):
+            I[j] = len(arr)-1
 
-    weight_higher = sum( x[2] for x in higher )
-    weight_lower  = n.commodity_weight - weight_higher
+    Z = [arr[i][0] for i in I]; Z.append(np.inf)
+    clusters = [
+        [x for x in n.elements if (low <= coordinate(x) < high)] for low, high in zip(Z, Z[1:])
+    ]
+    new_nodes = [treeNode([],c,sum(x[2] for x in c)) for c in clusters]
 
-    high = treeNode([],higher,weight_higher)
-    low  = treeNode([],lower ,weight_lower )
-
-    # este nodo reemplaza el nodo de entrada
-    res = treeNode([high,low],[],n.commodity_weight)
+    ## este nodo reemplaza el nodo de entrada
+    res = treeNode(new_nodes,[],n.commodity_weight)
     return res 
 
-treeNode.sub_clustering_algorithm = lambda x : randomSplit(x)
+treeNode.sub_clustering_algorithm = lambda x : randomSplit(x,2)
 
 # ejemplo
-lower_thresh = 200
-U = lambda : np.random.normal()
+lower_thresh = 300
+def xy():
+    x = np.random.normal()
+    y = np.random.exponential()
+    return (x,y)
+
 X = lambda : np.random.uniform(low=1,high=4)
 
 M = 100000 # ufa, esto es grande
-input_data = [np.array([U(),U(),X()]) for _i in range(M)]
+input_data = [np.array([*xy(),X()]) for _i in range(M)]
 
 print("comenzando!")
 T = treeNode.make(input_data)
@@ -136,3 +140,8 @@ for k in K:
     ax.scatter(xx,yy,s=8.,marker="D")
 
 plt.show()
+
+## recta al azar
+#a = np.random.uniform(-1,1)
+#b = np.random.uniform(-1,1)
+#coordinate = lambda x : a*x[0] + b*x[1]
